@@ -16,14 +16,7 @@ export default async function AuthButton() {
     return (
       <>
         <div className="flex gap-4 items-center">
-          <div>
-            <Badge
-              variant={"default"}
-              className="font-normal pointer-events-none"
-            >
-              Please update .env.local file with anon key and url
-            </Badge>
-          </div>
+         
           <div className="flex gap-2">
             <Button
               asChild

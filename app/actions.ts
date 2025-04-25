@@ -19,7 +19,7 @@ export const signUpAction = async (formData: FormData) => {
     );
   }
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -27,10 +27,34 @@ export const signUpAction = async (formData: FormData) => {
     },
   });
 
-  if (error) {
-    console.error(error.code + " " + error.message);
-    return encodedRedirect("error", "/sign-up", error.message);
+  if (signUpError) {
+    console.error(signUpError.code + " " + signUpError.message);
+    if (signUpError.message.includes("already registered")) {
+      return encodedRedirect("error", "/sign-up", "User already exists");
+    }
+    return encodedRedirect("error", "/sign-up", signUpError.message);
   } else {
+    if (!data.user) {
+      console.error("User not created");
+      return encodedRedirect("error", "/sign-up", "Sign up failed");
+    }
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .insert([{ user_id: data.user.id, email }]);
+
+    if (profileError) {
+      console.error(profileError.message);
+      console.log(profileError);
+      // if(profileError.message == "insert or update on table "profiles" violates foreign key constraint "profiles_user_id_fkey""){
+      //   return encodedRedirect("error", "/sign-up", "User already exists");
+      // }
+      if(profileError.code == '23503'){
+        return encodedRedirect("error", "/sign-up", "User already exists");
+      }
+      return encodedRedirect("error", "/sign-up", "Could not create profile");
+    }
+
     return encodedRedirect(
       "success",
       "/sign-up",
@@ -44,6 +68,17 @@ export const signInAction = async (formData: FormData) => {
   const password = formData.get("password") as string;
   const supabase = await createClient();
 
+  // Check if the user exists in the profiles table
+  const { data: profileData, error: profileError } = await supabase
+    .from("profiles")
+    .select("email")
+    .eq("email", email)
+    .single();
+
+  if (profileError || !profileData) {
+    return encodedRedirect("error", "/sign-in", "User not present, sign up first");
+  }
+
   const { error } = await supabase.auth.signInWithPassword({
     email,
     password,
@@ -53,7 +88,7 @@ export const signInAction = async (formData: FormData) => {
     return encodedRedirect("error", "/sign-in", error.message);
   }
 
-  return redirect("/protected");
+  return redirect("/dashboard");
 };
 
 export const forgotPasswordAction = async (formData: FormData) => {
@@ -67,7 +102,7 @@ export const forgotPasswordAction = async (formData: FormData) => {
   }
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/callback?redirect_to=/protected/reset-password`,
+    redirectTo: `${origin}/auth/callback?redirect_to=/dashboard/reset-password`,
   });
 
   if (error) {
@@ -97,17 +132,17 @@ export const resetPasswordAction = async (formData: FormData) => {
   const confirmPassword = formData.get("confirmPassword") as string;
 
   if (!password || !confirmPassword) {
-    encodedRedirect(
+    return encodedRedirect(
       "error",
-      "/protected/reset-password",
+      "/dashboard/reset-password",
       "Password and confirm password are required",
     );
   }
 
   if (password !== confirmPassword) {
-    encodedRedirect(
+    return encodedRedirect(
       "error",
-      "/protected/reset-password",
+      "/dashboard/reset-password",
       "Passwords do not match",
     );
   }
@@ -117,14 +152,14 @@ export const resetPasswordAction = async (formData: FormData) => {
   });
 
   if (error) {
-    encodedRedirect(
+    return encodedRedirect(
       "error",
-      "/protected/reset-password",
+      "/dashboard/reset-password",
       "Password update failed",
     );
   }
 
-  encodedRedirect("success", "/protected/reset-password", "Password updated");
+  return encodedRedirect("success", "/dashboard/reset-password", "Password updated");
 };
 
 export const signOutAction = async () => {
